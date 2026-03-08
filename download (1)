@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="صانع قصص نصية احترافي مستوحى من تيك توك — TikTok-style Story Maker" />
+  <meta name="theme-color" content="#0a0a0d" />
+
+  <title>Story Maker Pro — صانع القصص</title>
+
+  <!-- ============================================================
+       EXTERNAL STYLESHEET
+       ============================================================ -->
+  <link rel="stylesheet" href="css/style.css" />
+
+  <!-- ============================================================
+       html2canvas — used for PNG export of the preview card.
+       Version pinned for stability. Update with care.
+       https://html2canvas.hertzen.com/
+       ============================================================ -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"
+          integrity="sha512-BNaRQnYJYiPSqHHDb58B0yaPfCu+Wgds8Gp/gU33kqBtgNS4tSPHuGibyoeqMV/TJlSKda6FXzoEyYGjTe+vXA=="
+          crossorigin="anonymous"
+          referrerpolicy="no-referrer"
+          defer>
+  </script>
+</head>
+
+<body>
+
+  <!-- ============================================================
+       TOP BAR
+       ============================================================ -->
+  <header class="topbar" role="banner">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">✦</div>
+      <div class="brand-name">Story<em>Maker</em> Pro</div>
+      <span class="brand-ver">v3</span>
+    </div>
+    <p class="topbar-sub">صانع القصص المتقدم</p>
+  </header>
+
+  <!-- ============================================================
+       MAIN APPLICATION LAYOUT
+       Two-column on desktop, single-column on mobile.
+       ============================================================ -->
+  <main class="app" role="main">
+
+    <!-- ── LEFT / TOP: Preview Card ──────────────────────────── -->
+    <section class="col-preview" aria-label="معاينة القصة">
+
+      <div class="card-shell">
+        <!-- The 9:16 story card -->
+        <div id="preview-box" role="img" aria-label="معاينة القصة النصية">
+
+          <!-- Layer 0: Background (CSS gradient or uploaded image) -->
+          <div id="preview-bg" aria-hidden="true"></div>
+
+          <!-- Layer 1: Draggable text container
+               • position:absolute — JS converts initial transform-center
+                 to explicit top/left on first drag for html2canvas compat.
+               • touch-action:none — prevents scroll hijack on mobile. -->
+          <div id="text-container" aria-live="polite" aria-label="النص المعروض">
+            <!-- THE KEY ELEMENT:
+                 display:inline + white-space:pre-wrap + box-decoration-break:clone
+                 → each wrapped line gets its own colored background bubble,
+                   replicating the TikTok per-line highlight effect exactly. -->
+            <span id="preview-span"></span>
+          </div>
+
+          <!-- Drag hint (visible once, fades after first drag) -->
+          <div id="drag-hint" aria-hidden="true">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              <polyline points="5 9 2 12 5 15"/>
+              <polyline points="19 9 22 12 19 15"/>
+              <line x1="2" y1="12" x2="22" y2="12"/>
+            </svg>
+            اسحب النص لتحريكه
+          </div>
+
+        </div><!-- /#preview-box -->
+      </div><!-- /.card-shell -->
+
+      <p class="preview-label">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <rect x="5" y="2" width="14" height="20" rx="2"/>
+        </svg>
+        معاينة · 9:16
+      </p>
+
+    </section><!-- /.col-preview -->
+
+
+    <!-- ── RIGHT / BOTTOM: Controls Panel ────────────────────── -->
+    <aside class="col-controls" aria-label="أدوات التحكم">
+
+      <!-- ── Panel 1: Text Input ── -->
+      <div class="panel" id="panel-text">
+        <header class="panel-hdr">
+          <span class="panel-icon" aria-hidden="true">✏️</span>
+          <h2 class="panel-title">النص</h2>
+        </header>
+
+        <textarea
+          id="story-input"
+          dir="rtl"
+          rows="4"
+          maxlength="300"
+          placeholder="اكتب ما يدور في خاطرك..."
+          aria-label="أدخل النص هنا"
+        >اكتب قصتك هنا...</textarea>
+
+        <span id="char-count" aria-live="polite" aria-label="عداد الحروف">16 / 300</span>
+      </div>
+
+      <!-- ── Panel 2: Alignment + Text Style Cycler ── -->
+      <div class="panel" id="panel-style">
+        <header class="panel-hdr">
+          <span class="panel-icon" aria-hidden="true">🎛️</span>
+          <h2 class="panel-title">الأسلوب والمحاذاة</h2>
+        </header>
+
+        <div class="toolbar">
+
+          <!-- Text alignment: Right / Center / Left -->
+          <div class="seg-group" id="align-group" role="group" aria-label="محاذاة النص">
+
+            <button class="seg-btn" data-align="right" title="محاذاة يمين" aria-label="يمين">
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                <rect x="2" y="2.5"  width="12" height="2" rx="1"/>
+                <rect x="5" y="7"    width="9"  height="2" rx="1"/>
+                <rect x="3" y="11.5" width="11" height="2" rx="1"/>
+              </svg>
+            </button>
+
+            <button class="seg-btn active" data-align="center" title="توسيط" aria-label="توسيط" aria-pressed="true">
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                <rect x="2" y="2.5"  width="12" height="2" rx="1"/>
+                <rect x="4" y="7"    width="8"  height="2" rx="1"/>
+                <rect x="3" y="11.5" width="10" height="2" rx="1"/>
+              </svg>
+            </button>
+
+            <button class="seg-btn" data-align="left" title="محاذاة يسار" aria-label="يسار">
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                <rect x="2" y="2.5"  width="12" height="2" rx="1"/>
+                <rect x="2" y="7"    width="9"  height="2" rx="1"/>
+                <rect x="2" y="11.5" width="11" height="2" rx="1"/>
+              </svg>
+            </button>
+
+          </div><!-- /#align-group -->
+
+          <!-- 4-state TikTok style cycler -->
+          <button id="style-btn"
+                  class="style-cycler active-0"
+                  title="تبديل أسلوب النص (4 حالات)"
+                  aria-label="تبديل أسلوب النص">
+            <span id="style-preview" class="style-preview" aria-hidden="true">A</span>
+            <span id="style-label">عادي</span>
+          </button>
+
+        </div><!-- /.toolbar -->
+
+        <!-- State indicator: 4 pip dots + description -->
+        <div class="state-indicator" aria-live="polite">
+          <div id="state-pip-0" class="pip pip--active"></div>
+          <div id="state-pip-1" class="pip"></div>
+          <div id="state-pip-2" class="pip"></div>
+          <div id="state-pip-3" class="pip"></div>
+          <span id="state-desc" class="state-desc">نص بلون مختار</span>
+        </div>
+
+      </div><!-- /#panel-style -->
+
+      <!-- ── Panel 3: Font + Size + Line Height ── -->
+      <div class="panel" id="panel-typography">
+        <header class="panel-hdr">
+          <span class="panel-icon" aria-hidden="true">🔤</span>
+          <h2 class="panel-title">الخط والحجم والتباعد</h2>
+        </header>
+
+        <!-- Scrollable font chip list — add new fonts in js/script.js FONTS array -->
+        <div class="chip-scroll" id="font-row" role="list" aria-label="اختر الخط"></div>
+
+        <div class="divider"></div>
+
+        <!-- Font size slider: 13px → 62px -->
+        <div class="slider-row">
+          <label class="slider-lbl" for="size-slider">الحجم</label>
+          <input type="range" id="size-slider"
+                 min="13" max="62" value="26"
+                 aria-label="حجم الخط" />
+          <span class="slider-val" id="size-val">26px</span>
+        </div>
+
+        <!-- Line height slider: 1.0× → 3.0× (stored as integer ×10 to avoid float drift) -->
+        <div class="slider-row">
+          <label class="slider-lbl" for="lh-slider">التباعد</label>
+          <input type="range" id="lh-slider"
+                 min="10" max="30" value="20" step="1"
+                 aria-label="تباعد الأسطر" />
+          <span class="slider-val" id="lh-val">2.0×</span>
+        </div>
+
+      </div><!-- /#panel-typography -->
+
+      <!-- ── Panel 4: Color Palette ── -->
+      <div class="panel" id="panel-colors">
+        <header class="panel-hdr">
+          <span class="panel-icon" aria-hidden="true">🎨</span>
+          <h2 class="panel-title">اللون</h2>
+        </header>
+
+        <!-- Context label changes based on the active text style -->
+        <div class="color-mode-row">
+          <span>اللون يؤثر على:</span>
+          <span class="mode-pill state0" id="mode-pill" aria-live="polite">لون النص</span>
+        </div>
+
+        <!-- Swatch grid — items injected by JS from COLORS array in script.js -->
+        <div class="swatches" id="swatches" role="group" aria-label="لوحة الألوان"></div>
+
+      </div><!-- /#panel-colors -->
+
+      <!-- ── Panel 5: Background Picker ── -->
+      <div class="panel" id="panel-backgrounds">
+        <header class="panel-hdr">
+          <span class="panel-icon" aria-hidden="true">🖼️</span>
+          <h2 class="panel-title">الخلفية</h2>
+        </header>
+
+        <!-- Horizontally scrollable row of background thumbnails.
+             Thumbs are injected by JS from the BACKGROUNDS array.
+             Upload button is always last. -->
+        <div class="bg-row" id="bg-row" role="list" aria-label="اختر الخلفية">
+
+          <!-- Image upload — always the last item in the row -->
+          <label class="bg-upload" for="bg-file" title="رفع صورة من الجهاز" role="button">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="17 8 12 3 7 8"/>
+              <line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+            <span>رفع<br>صورة</span>
+          </label>
+          <input type="file" id="bg-file" accept="image/*" aria-label="رفع صورة خلفية" />
+
+        </div><!-- /#bg-row -->
+      </div><!-- /#panel-backgrounds -->
+
+      <!-- ── Export Button ── -->
+      <button id="dl-btn" aria-label="تنزيل القصة كصورة PNG">
+
+        <!-- Download icon (default state) -->
+        <svg id="dl-icon" width="18" height="18" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2.5"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="7 10 12 15 17 10"/>
+          <line x1="12" y1="15" x2="12" y2="3"/>
+        </svg>
+
+        <!-- Spinner (loading state) -->
+        <div class="dl-spin" id="dl-spin" style="display:none" aria-hidden="true"></div>
+
+        <!-- Checkmark (success state) -->
+        <svg id="dl-ok" width="18" height="18" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2.5"
+             stroke-linecap="round" stroke-linejoin="round"
+             style="display:none" aria-hidden="true">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+
+        <span id="dl-lbl">تنزيل القصة</span>
+
+      </button><!-- /#dl-btn -->
+
+    </aside><!-- /.col-controls -->
+
+  </main><!-- /.app -->
+
+
+  <!-- ============================================================
+       APPLICATION SCRIPT  (type="module" enables ES module syntax
+       and automatically defers execution until DOM is ready)
+       ============================================================ -->
+  <script type="module" src="js/script.js"></script>
+
+</body>
+</html>

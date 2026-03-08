@@ -1,1097 +1,1024 @@
-/**
- * Story Maker Pro — js/script.js
- * ============================================================
- * TikTok-style text story generator.
- * Pure Vanilla JS, no frameworks or build tools required.
- *
- * Architecture:
- *   1. Configuration  — edit COLORS, FONTS, BACKGROUNDS here
- *   2. State          — single S object, render() is the only writer
- *   3. DOM Refs       — all getElementById calls in one place
- *   4. Helpers        — pure utility functions
- *   5. render()       — single source of truth → DOM sync
- *   6. Build UI       — inject dynamic elements (swatches, thumbs, chips)
- *   7. Event Handlers — each feature wired up separately
- *   8. Drag & Drop    — mouse + touch, absolute top/left for html2canvas
- *   9. Export         — html2canvas PNG download
- *  10. Init           — entry point
- *
- * Open-source contribution guide:
- *   • Add a new color  → append to COLORS array
- *   • Add a new font   → append to FONTS array (also add @import to style.css)
- *   • Add a background → append to BACKGROUNDS array
- * ============================================================
- */
-
-'use strict';
-
-/* ============================================================
-   1. CONFIGURATION ARRAYS
-   ────────────────────────────────────────────────────────────
-   Contributors: this is the place to add new options.
-   All arrays are consumed by buildUI() — no other changes needed.
-   ============================================================ */
-
-/**
- * COLORS — The color palette swatches.
- * Each object needs:
- *   c    {string}  CSS color value (hex recommended for hexToRgb helper)
- *   name {string}  Arabic label shown as tooltip (title attribute)
- */
-const COLORS = [
-  { c: '#ffffff', name: 'أبيض'       },
-  { c: '#000000', name: 'أسود'       },
-  { c: '#fe2c55', name: 'أحمر'       },
-  { c: '#ffea00', name: 'أصفر'       },
-  { c: '#39ff14', name: 'أخضر نيون'  },
-  { c: '#00b4ff', name: 'أزرق'       },
-  { c: '#bf5fff', name: 'بنفسجي'     },
-  { c: '#ff69b4', name: 'وردي'       },
-  { c: '#ff8c00', name: 'برتقالي'    },
-  { c: '#00ffcc', name: 'فيروزي'     },
-  { c: '#e91e63', name: 'وردي داكن'  },
-  { c: '#4caf50', name: 'أخضر'       },
-];
-
-/**
- * FONTS — Arabic Google Font options.
- * Each object needs:
- *   family  {string}  Exact Google Fonts family name (used in font-family CSS)
- *   label   {string}  Short display label shown on the chip button
- *
- * ⚠️  If you add a font here, you MUST also add it to the
- *     Google Fonts @import URL in css/style.css.
- */
-const FONTS = [
-  { family: 'Cairo',                 label: 'Cairo'     },
-  { family: 'Tajawal',               label: 'Tajawal'   },
-  { family: 'Lalezar',               label: 'Lalezar'   },
-  { family: 'Aref Ruqaa',            label: 'Aref Ruqaa'},
-  { family: 'Marhey',                label: 'Marhey'    },
-  { family: 'Reem Kufi Fun',         label: 'Reem Kufi' },
-  { family: 'IBM Plex Sans Arabic',  label: 'IBM Plex'  },
-];
-
-/**
- * BACKGROUNDS — Background options for the story card.
- * Two supported types:
- *
- *   type: 'css'
- *     css  {string}  Full CSS property string applied to #preview-bg's style.
- *                    Can include background, background-image, background-size, etc.
- *
- *   type: 'image'
- *     src  {string}  Path to image file, relative to index.html.
- *                    Put images in assets/backgrounds/ and reference them here.
- *
- * The thumbnail previews each type correctly:
- *   - 'css'   → same CSS string applied to the thumb's inner div
- *   - 'image' → background-image: url(src) applied to the thumb's inner div
- */
-const BACKGROUNDS = [
-  // ── Solid / Dark ──────────────────────────────────────────
-  {
-    id: 'bg-black',
-    type: 'css',
-    css: 'background: #0d0d0d;',
-  },
-  {
-    id: 'bg-dark-purple',
-    type: 'css',
-    css: 'background: linear-gradient(160deg, #0f0c29, #302b63, #24243e);',
-  },
-  {
-    id: 'bg-deep-navy',
-    type: 'css',
-    css: 'background: linear-gradient(145deg, #1a1a2e, #16213e, #0f3460);',
-  },
-  {
-    id: 'bg-blood',
-    type: 'css',
-    css: 'background: linear-gradient(145deg, #200122, #6f0000);',
-  },
-  {
-    id: 'bg-dark-emerald',
-    type: 'css',
-    css: 'background: linear-gradient(145deg, #093028, #237a57);',
-  },
-
-  // ── Vibrant Gradients ──────────────────────────────────────
-  {
-    id: 'bg-pink-burst',
-    type: 'css',
-    css: 'background: linear-gradient(135deg, #f093fb, #f5576c);',
-  },
-  {
-    id: 'bg-golden',
-    type: 'css',
-    css: 'background: linear-gradient(135deg, #fceabb, #f8b500);',
-  },
-  {
-    id: 'bg-rose',
-    type: 'css',
-    css: 'background: linear-gradient(145deg, #fce4ec, #f8bbd0, #fce4ec);',
-  },
-  {
-    id: 'bg-ocean',
-    type: 'css',
-    css: 'background: linear-gradient(135deg, #005c97, #363795);',
-  },
-  {
-    id: 'bg-mint',
-    type: 'css',
-    css: 'background: linear-gradient(135deg, #11998e, #38ef7d);',
-  },
-  {
-    id: 'bg-sunset',
-    type: 'css',
-    css: 'background: linear-gradient(180deg, #ff416c, #ff4b2b);',
-  },
-  {
-    id: 'bg-aurora',
-    type: 'css',
-    css: 'background: linear-gradient(135deg, #0d0d0d 0%, #1a0533 50%, #0d0d0d 100%);',
-  },
-
-  // ── Textured / Patterned ──────────────────────────────────
-  {
-    id: 'bg-parchment',
-    type: 'css',
-    css: 'background-color: #f0ddb8; background-image: radial-gradient(ellipse at top, rgba(200,160,60,.2), transparent 60%);',
-  },
-  {
-    id: 'bg-dots',
-    type: 'css',
-    css: 'background: #111; background-image: radial-gradient(rgba(255,255,255,.045) 1px, transparent 1px); background-size: 22px 22px;',
-  },
-
-  // ── Image Backgrounds ─────────────────────────────────────
-  // To activate: add image files to assets/backgrounds/
-  // and uncomment or add entries like these:
-  //
-  // {
-  //   id:   'bg-photo-1',
-  //   type: 'image',
-  //   src:  'assets/backgrounds/bg1.jpg',
-  // },
-  // {
-  //   id:   'bg-photo-2',
-  //   type: 'image',
-  //   src:  'assets/backgrounds/bg2.jpg',
-  // },
-  // {
-  //   id:   'bg-photo-3',
-  //   type: 'image',
-  //   src:  'assets/backgrounds/bg3.jpg',
-  // },
-];
-
-/**
- * STYLE_STATES — Metadata for the 4-state text style cycler.
- * Order matters: index maps to S.textStyle value.
- *
- *   id       {number}  State index (0–3)
- *   label    {string}  Short Arabic label shown on the cycle button
- *   desc     {string}  Longer description shown in state indicator strip
- *   pipColor {string}  CSS color for the indicator pip dot
- *   btnClass {string}  CSS class applied to #style-btn to change its border color
- *
- * The actual visual rendering of each state lives in render() → applyTextStyle().
- */
-const STYLE_STATES = [
-  {
-    id:       0,
-    label:    'عادي',
-    desc:     'نص بلون مختار',
-    pipColor: '#ffffff',
-    btnClass: 'active-0',
-    pillCls:  'state0',
-    pillText: 'لون النص',
-  },
-  {
-    id:       1,
-    label:    'خلفية',
-    desc:     'خلفية ملونة صلبة',
-    pipColor: '#fe2c55',
-    btnClass: 'active-1',
-    pillCls:  'state1',
-    pillText: 'لون الخلفية',
-  },
-  {
-    id:       2,
-    label:    'شفاف',
-    desc:     'خلفية شفافة 50٪',
-    pipColor: '#25f4ee',
-    btnClass: 'active-2',
-    pillCls:  'state2',
-    pillText: 'لون الخلفية',
-  },
-  {
-    id:       3,
-    label:    'نيون',
-    desc:     'توهج ملون',
-    pipColor: '#bf5fff',
-    btnClass: 'active-3',
-    pillCls:  'state3',
-    pillText: 'لون التوهج',
-  },
-];
+/* ==============================================================
+   Story Maker Pro — css/style.css
+   ==============================================================
+   Table of Contents:
+     1. Google Fonts Import
+     2. Design Tokens (CSS Custom Properties)
+     3. Reset & Base
+     4. Top Bar
+     5. App Layout
+     6. Preview Card
+        6a. Card Shell (glow ring)
+        6b. Preview Box (9:16 container)
+        6c. Draggable Text Container
+        6d. Preview Span — TikTok Clone Effect
+        6e. Text Style States (0–3)
+        6f. Drag Hint Overlay
+     7. Control Panels
+     8. Toolbar (Alignment + Style Cycler)
+     9. Font Chips
+    10. Sliders (Size + Line Height)
+    11. Color Palette
+    12. Background Picker
+    13. Download Button
+    14. Animations
+    15. Scrollbar Styling
+    16. Responsive (Mobile ≤ 680px)
+   ============================================================== */
 
 
-/* ============================================================
-   2. APPLICATION STATE
-   ────────────────────────────────────────────────────────────
-   Single S object. render() reads S and updates the DOM.
-   No direct DOM writes happen outside of render() or the
-   drag handlers (which only touch top/left for performance).
-   ============================================================ */
-const S = {
-  text:       'اكتب قصتك هنا...',  // textarea content
-  font:       'Cairo',              // active font family
-  size:       26,                   // font-size in px
-  lineHeight: 2.0,                  // unitless line-height multiplier
-  align:      'center',             // 'right' | 'center' | 'left'
-  color:      '#ffffff',            // active palette color (hex)
-  textStyle:  0,                    // 0=Normal 1=Solid 2=Translucent 3=Neon
-  bgId:       'bg-black',           // active BACKGROUNDS entry id
-  bgImage:    null,                 // data-URL of uploaded image (overrides bgId)
-};
+/* ──────────────────────────────────────────────────────────────
+   1. GOOGLE FONTS IMPORT
+   Arabic display & text families loaded from Google Fonts CDN.
+   Adding a new font here? Also add it to the FONTS array in js/script.js.
+   ────────────────────────────────────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&family=Tajawal:wght@300;400;500;700&family=Lalezar&family=Aref+Ruqaa:wght@400;700&family=Marhey:wght@400;600;700&family=Reem+Kufi+Fun:wght@400;700&family=IBM+Plex+Sans+Arabic:wght@400;500;700&display=swap');
 
 
-/* ============================================================
-   3. DOM ELEMENT REFERENCES
-   ────────────────────────────────────────────────────────────
-   All getElementById calls consolidated here.
-   If you rename an element in HTML, update it once here.
-   ============================================================ */
-const $ = (id) => document.getElementById(id);
+/* ──────────────────────────────────────────────────────────────
+   2. DESIGN TOKENS (CSS Custom Properties)
+   Central source of truth for the dark theme.
+   ────────────────────────────────────────────────────────────── */
+:root {
+  /* Brand accent colors */
+  --red:          #fe2c55;
+  --teal:         #25f4ee;
+  --purple:       #bf5fff;
+  --red-glow:     rgba(254, 44,  85,  0.40);
+  --teal-glow:    rgba(37,  244, 238, 0.22);
+  --purple-glow:  rgba(191, 95,  255, 0.22);
 
-const DOM = {
-  previewBox:   $('preview-box'),
-  previewBg:    $('preview-bg'),
-  textContainer: $('text-container'),
-  pvSpan:       $('preview-span'),
-  textarea:     $('story-input'),
-  charCount:    $('char-count'),
-  sizeSlider:   $('size-slider'),
-  sizeVal:      $('size-val'),
-  lhSlider:     $('lh-slider'),
-  lhVal:        $('lh-val'),
-  styleBtn:     $('style-btn'),
-  stylePreview: $('style-preview'),
-  styleLabel:   $('style-label'),
-  stateDesc:    $('state-desc'),
-  modePill:     $('mode-pill'),
-  swatchWrap:   $('swatches'),
-  fontRow:      $('font-row'),
-  bgRow:        $('bg-row'),
-  bgFile:       $('bg-file'),
-  dragHint:     $('drag-hint'),
-  dlBtn:        $('dl-btn'),
-  dlLbl:        $('dl-lbl'),
-  dlIcon:       $('dl-icon'),
-  dlSpin:       $('dl-spin'),
-  dlOkIcon:     $('dl-ok'),
-};
+  /* Surface layers (darkest → lightest) */
+  --bg:    #0a0a0d;
+  --bg2:   #111116;
+  --bg3:   #17171e;
+  --bg4:   #1d1d26;
+  --bg5:   #23232f;
 
+  /* Border shades */
+  --bdr:    rgba(255, 255, 255, 0.07);
+  --bdr-md: rgba(255, 255, 255, 0.14);
+  --bdr-hi: rgba(255, 255, 255, 0.26);
 
-/* ============================================================
-   4. HELPER FUNCTIONS
-   ============================================================ */
+  /* Text shades */
+  --t1: #f0f0f0;
+  --t2: rgba(240, 240, 240, 0.55);
+  --t3: rgba(240, 240, 240, 0.28);
 
-/**
- * hexToRgb
- * Converts a 6-character hex color string to an {r, g, b} object.
- * Required to build rgba() strings for the translucent background state.
- *
- * @param  {string} hex  e.g. '#fe2c55'
- * @returns {{r:number, g:number, b:number}}
- */
-function hexToRgb(hex) {
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  return { r, g, b };
+  /* Shared radius & transition */
+  --r:   10px;
+  --r2:  14px;
+  --tr:  0.17s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/**
- * contrastColor
- * Returns '#000000' or '#ffffff' based on the relative luminance of hex.
- * Used in the Solid Background state to auto-pick legible text color.
- *
- * Formula: W3C relative luminance approximation.
- *
- * @param  {string} hex  e.g. '#ffea00'
- * @returns {string}     '#000000' or '#ffffff'
- */
-function contrastColor(hex) {
-  const { r, g, b } = hexToRgb(hex);
-  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-  return luminance > 0.55 ? '#000000' : '#ffffff';
+
+/* ──────────────────────────────────────────────────────────────
+   3. RESET & BASE
+   ────────────────────────────────────────────────────────────── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin:     0;
+  padding:    0;
 }
 
-/**
- * setSliderTrack
- * Updates the --pct CSS custom property on a range input so the teal
- * "filled" portion of the track correctly reflects the current value.
- *
- * The CSS on the track uses:
- *   background: linear-gradient(to right, var(--teal) 0%, var(--teal) var(--pct), var(--bg4) var(--pct))
- *
- * @param {HTMLInputElement} el   The range input element
- * @param {number}           min  Slider minimum
- * @param {number}           max  Slider maximum
- * @param {number}           val  Current value
- */
-function setSliderTrack(el, min, max, val) {
-  const pct = ((val - min) / (max - min)) * 100;
-  el.style.setProperty('--pct', `${pct.toFixed(1)}%`);
+html,
+body {
+  height: 100%;
 }
 
-/**
- * bgCssForEntry
- * Returns the CSS string to apply to an element's style.cssText
- * for a given BACKGROUNDS entry.
- *
- * @param  {Object} entry  An entry from the BACKGROUNDS array
- * @returns {string}       CSS string
- */
-function bgCssForEntry(entry) {
-  if (entry.type === 'image') {
-    return `background-image: url('${entry.src}'); background-size: cover; background-position: center;`;
+body {
+  font-family:              'Cairo', sans-serif;
+  background:               var(--bg);
+  color:                    var(--t1);
+  min-height:               100vh;
+  display:                  flex;
+  flex-direction:           column;
+  -webkit-font-smoothing:   antialiased;
+  -moz-osx-font-smoothing:  grayscale;
+}
+
+/* Reset buttons so we start from a consistent baseline */
+button {
+  cursor:       pointer;
+  font-family:  'Cairo', sans-serif;
+  border:       none;
+  background:   none;
+  color:        inherit;
+}
+
+/* Prevent SVG from stretching flex containers */
+svg {
+  display:    block;
+  flex-shrink: 0;
+}
+
+
+/* ──────────────────────────────────────────────────────────────
+   4. TOP BAR
+   Sticky frosted-glass header.
+   ────────────────────────────────────────────────────────────── */
+.topbar {
+  display:              flex;
+  align-items:          center;
+  justify-content:      space-between;
+  padding:              11px 24px;
+  border-bottom:        1px solid var(--bdr);
+  background:           rgba(10, 10, 13, 0.94);
+  backdrop-filter:      blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  position:             sticky;
+  top:                  0;
+  z-index:              200;
+}
+
+.brand {
+  display:      flex;
+  align-items:  center;
+  gap:          10px;
+}
+
+.brand-mark {
+  width:            30px;
+  height:           30px;
+  border-radius:    8px;
+  background:       linear-gradient(135deg, var(--red), #ff7088);
+  display:          flex;
+  align-items:      center;
+  justify-content:  center;
+  font-size:        15px;
+  box-shadow:       0 0 18px var(--red-glow);
+}
+
+.brand-name {
+  font-size:      16px;
+  font-weight:    800;
+  letter-spacing: -0.01em;
+  color:          #fff;
+}
+
+.brand-name em {
+  font-style: normal;
+  color:       var(--red);
+}
+
+.brand-ver {
+  font-size:      10px;
+  font-weight:    700;
+  letter-spacing: 0.06em;
+  color:          var(--teal);
+  background:     rgba(37, 244, 238, 0.10);
+  border:         1px solid rgba(37, 244, 238, 0.22);
+  border-radius:  20px;
+  padding:        1px 7px;
+}
+
+.topbar-sub {
+  font-size:      11px;
+  color:          var(--t3);
+  letter-spacing: 0.06em;
+}
+
+
+/* ──────────────────────────────────────────────────────────────
+   5. APP LAYOUT
+   Two-column flex on desktop.
+   ────────────────────────────────────────────────────────────── */
+.app {
+  display:    flex;
+  flex:       1;
+  gap:        22px;
+  padding:    22px 24px 60px;
+  max-width:  1080px;
+  width:      100%;
+  margin:     0 auto;
+}
+
+/* ── Preview column — sticky so card stays visible while scrolling controls ── */
+.col-preview {
+  flex:             0 0 auto;
+  display:          flex;
+  flex-direction:   column;
+  align-items:      center;
+  gap:              13px;
+  position:         sticky;
+  top:              72px;
+  align-self:       flex-start;
+}
+
+/* ── Controls column — scrollable, takes remaining width ── */
+.col-controls {
+  flex:      1;
+  min-width: 0;
+  display:   flex;
+  flex-direction: column;
+  gap:       10px;
+}
+
+
+/* ──────────────────────────────────────────────────────────────
+   6a. CARD SHELL — Animated conic glow ring
+   Uses animation to spin a conic gradient behind the card.
+   Compatible with all modern browsers; falls back gracefully.
+   ────────────────────────────────────────────────────────────── */
+.card-shell {
+  position:  relative;
+  width:     210px;
+}
+
+/* The spinning glow ring is the ::before pseudo-element */
+.card-shell::before {
+  content:       '';
+  position:      absolute;
+  inset:         -4px;
+  border-radius: 24px;
+  background:    conic-gradient(
+    from 0deg,
+    var(--red)    0%,
+    var(--teal)   33%,
+    #a855f7       66%,
+    var(--red)    100%
+  );
+  opacity:       0.4;
+  filter:        blur(10px);
+  z-index:       0;
+  animation:     ring-spin 6s linear infinite;
+}
+
+
+/* ──────────────────────────────────────────────────────────────
+   6b. PREVIEW BOX — The 9:16 card
+   ────────────────────────────────────────────────────────────── */
+#preview-box {
+  position:          relative;
+  z-index:           1;
+  width:             100%;
+  aspect-ratio:      9 / 16;
+  border-radius:     20px;
+  overflow:          hidden;     /* clip dragged text at card edges */
+  background:        #111;
+  isolation:         isolate;   /* new stacking context */
+  user-select:       none;      /* disable text-selection during drag */
+  -webkit-user-select: none;
+}
+
+/* Layer 0: Background gradient or image */
+#preview-bg {
+  position:            absolute;
+  inset:               0;
+  z-index:             0;
+  background:          #111;
+  background-size:     cover;
+  background-position: center;
+  transition:          background 0.32s ease;
+}
+
+/* Vignette: subtle edge darkening applied above the background */
+#preview-box::after {
+  content:         '';
+  position:        absolute;
+  inset:           0;
+  z-index:         1;
+  background:      radial-gradient(
+    ellipse at 50% 50%,
+    transparent 48%,
+    rgba(0, 0, 0, 0.30) 100%
+  );
+  pointer-events:  none;
+}
+
+
+/* ──────────────────────────────────────────────────────────────
+   6c. DRAGGABLE TEXT CONTAINER
+   ────────────────────────────────────────────────────────────────
+   Position strategy:
+   ┌─────────────────────────────────────────────────────────────┐
+   │  CSS Initial: top:50%; left:50%; transform:translate(-50%,-50%)  │
+   │  → Pure-CSS centering, no JS required for first paint.      │
+   │                                                             │
+   │  On first drag: JS calls initDragPosition() which:          │
+   │    1. Reads getBoundingClientRect() to get pixel coords.    │
+   │    2. Sets explicit top / left px values.                   │
+   │    3. Removes the transform.                                │
+   │                                                             │
+   │  After that: only top / left are mutated.                   │
+   │  html2canvas reads top/left directly — no offset bugs.      │
+   └─────────────────────────────────────────────────────────────┘
+   ────────────────────────────────────────────────────────────── */
+#text-container {
+  position:     absolute;
+  z-index:      2;
+  top:          50%;
+  left:         50%;
+  transform:    translate(-50%, -50%);
+  width:        88%;        /* wraps text inside the card width */
+  text-align:   center;     /* overridden by alignment buttons */
+  cursor:       grab;
+  touch-action: none;       /* prevent browser scroll during drag */
+}
+
+#text-container.dragging {
+  cursor: grabbing;
+}
+
+
+/* ──────────────────────────────────────────────────────────────
+   6d. PREVIEW SPAN — The TikTok Clone Effect
+   ────────────────────────────────────────────────────────────────
+   KEY CSS PROPERTIES:
+   • display: inline          → creates inline line boxes (not a block)
+   • white-space: pre-wrap    → preserves newlines, wraps at boundaries
+   • box-decoration-break: clone
+     → When a line wraps, CSS "clones" the box-model decorations
+       (background, padding, border-radius) onto EACH line fragment.
+     → This is exactly how TikTok creates per-line highlight bubbles.
+   ────────────────────────────────────────────────────────────── */
+#preview-span {
+  display:         inline;
+  white-space:     pre-wrap;
+  word-break:      break-word;
+  font-family:     'Cairo', sans-serif;
+  font-size:       26px;
+  line-height:     2;
+  color:           #ffffff;
+  /* Transitions make real-time slider updates feel smooth */
+  transition:      color 0.15s ease, font-size 0.1s ease;
+}
+
+
+/* ──────────────────────────────────────────────────────────────
+   6e. TEXT STYLE STATES  (applied via JS className + inline styles)
+   ────────────────────────────────────────────────────────────────
+   State 0 – Normal:        color only, subtle shadow (inline via JS)
+   State 1 – Solid BG:      colored background, full opacity
+   State 2 – Translucent:   colored background at 50% opacity
+   State 3 – Neon Outline:  color glow + -webkit-text-stroke (inline via JS)
+
+   States 1 & 2 share the box-decoration-break trick (class applied
+   by JS; the actual color values are set inline to follow the palette).
+   ────────────────────────────────────────────────────────────── */
+
+/* Shared: States 1 and 2 both need padding, radius, and the clone decoration */
+#preview-span.style-solid,
+#preview-span.style-translucent {
+  padding:                      4px 11px;
+  border-radius:                8px;
+  box-decoration-break:         clone;
+  -webkit-box-decoration-break: clone;
+}
+
+/* State 3: Neon — extra letter-spacing gives the stroke visual breathing room */
+#preview-span.style-neon {
+  letter-spacing: 0.03em;
+}
+
+
+/* ──────────────────────────────────────────────────────────────
+   6f. DRAG HINT OVERLAY
+   Shown on first load; JS hides it permanently after first drag.
+   ────────────────────────────────────────────────────────────── */
+#drag-hint {
+  position:        absolute;
+  bottom:          14px;
+  left:            50%;
+  transform:       translateX(-50%);
+  z-index:         10;
+  display:         flex;
+  align-items:     center;
+  gap:             6px;
+  background:      rgba(0, 0, 0, 0.55);
+  border:          1px solid rgba(255, 255, 255, 0.15);
+  border-radius:   20px;
+  padding:         5px 12px;
+  font-size:       10px;
+  color:           rgba(255, 255, 255, 0.65);
+  pointer-events:  none;
+  white-space:     nowrap;
+  transition:      opacity 0.4s ease;
+}
+
+#drag-hint.hidden {
+  opacity: 0;
+}
+
+/* Caption below the card */
+.preview-label {
+  display:        flex;
+  align-items:    center;
+  gap:            6px;
+  font-size:      10px;
+  color:          var(--t3);
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+}
+
+
+/* ──────────────────────────────────────────────────────────────
+   7. CONTROL PANELS
+   Stacked cards with a shared dark surface + border.
+   Stagger animation via nth-child delay.
+   ────────────────────────────────────────────────────────────── */
+.panel {
+  background:    var(--bg2);
+  border:        1px solid var(--bdr);
+  border-radius: var(--r2);
+  padding:       13px 15px;
+  display:       flex;
+  flex-direction: column;
+  gap:           10px;
+  animation:     fadeup 0.38s ease both;
+}
+
+/* Stagger each panel's entrance animation */
+.panel:nth-child(1) { animation-delay: 0.02s; }
+.panel:nth-child(2) { animation-delay: 0.07s; }
+.panel:nth-child(3) { animation-delay: 0.12s; }
+.panel:nth-child(4) { animation-delay: 0.17s; }
+.panel:nth-child(5) { animation-delay: 0.22s; }
+
+.panel-hdr {
+  display:     flex;
+  align-items: center;
+  gap:         8px;
+}
+
+.panel-icon {
+  width:            22px;
+  height:           22px;
+  border-radius:    6px;
+  background:       var(--bg4);
+  border:           1px solid var(--bdr);
+  display:          flex;
+  align-items:      center;
+  justify-content:  center;
+  font-size:        12px;
+  flex-shrink:      0;
+}
+
+.panel-title {
+  font-size:      10px;
+  font-weight:    700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color:          var(--t3);
+}
+
+/* Horizontal rule inside panels */
+.divider {
+  height:     1px;
+  background: var(--bdr);
+}
+
+/* Textarea for story text */
+#story-input {
+  width:         100%;
+  background:    var(--bg3);
+  border:        1px solid var(--bdr);
+  border-radius: var(--r);
+  color:         var(--t1);
+  font-family:   'Cairo', sans-serif;
+  font-size:     15px;
+  line-height:   1.75;
+  padding:       11px 13px;
+  resize:        none;
+  outline:       none;
+  direction:     rtl;
+  min-height:    92px;
+  transition:    border-color var(--tr), box-shadow var(--tr);
+}
+
+#story-input:focus {
+  border-color: rgba(254, 44, 85, 0.50);
+  box-shadow:   0 0 0 3px rgba(254, 44, 85, 0.07);
+}
+
+#story-input::placeholder {
+  color: var(--t3);
+}
+
+#char-count {
+  font-size:             11px;
+  color:                 var(--t3);
+  direction:             ltr;
+  font-variant-numeric:  tabular-nums;
+  transition:            color 0.2s;
+}
+
+
+/* ──────────────────────────────────────────────────────────────
+   8. TOOLBAR  (Alignment segmented group + Style Cycler)
+   ────────────────────────────────────────────────────────────── */
+.toolbar {
+  display:     flex;
+  gap:         8px;
+  align-items: center;
+  flex-wrap:   wrap;
+}
+
+/* Alignment button group */
+.seg-group {
+  display:       flex;
+  background:    var(--bg3);
+  border:        1px solid var(--bdr);
+  border-radius: var(--r);
+  padding:       3px;
+  gap:           2px;
+}
+
+.seg-btn {
+  display:          flex;
+  align-items:      center;
+  justify-content:  center;
+  width:            34px;
+  height:           34px;
+  border-radius:    7px;
+  background:       transparent;
+  color:            var(--t2);
+  transition:       all var(--tr);
+}
+
+.seg-btn:hover {
+  color:       var(--t1);
+  background:  rgba(255, 255, 255, 0.07);
+}
+
+.seg-btn.active {
+  color:       #fff;
+  background:  rgba(255, 255, 255, 0.13);
+}
+
+/* ──────────────────────────────────────────────────────────────
+   4-STATE STYLE CYCLER  (The "A" Button)
+   ────────────────────────────────────────────────────────────────
+   One button cycles through:  Normal → Solid → Translucent → Neon
+   Border color shifts to signal the active state.
+   ────────────────────────────────────────────────────────────── */
+.style-cycler {
+  display:       flex;
+  align-items:   center;
+  gap:           8px;
+  height:        40px;
+  padding:       0 14px;
+  border-radius: var(--r);
+  border:        1.5px solid var(--bdr-md);
+  background:    transparent;
+  color:         var(--t2);
+  font-size:     13px;
+  font-weight:   700;
+  transition:    all var(--tr);
+  white-space:   nowrap;
+  flex-shrink:   0;
+}
+
+.style-cycler:hover {
+  border-color: var(--bdr-hi);
+  color:        var(--t1);
+}
+
+/* Active state border colors */
+.style-cycler.active-0 { border-color: rgba(255, 255, 255, 0.20); color: var(--t1); }
+.style-cycler.active-1 { border-color: var(--red);    color: var(--t1); box-shadow: 0 0 0 3px rgba(254, 44,  85,  0.08); }
+.style-cycler.active-2 { border-color: var(--teal);   color: var(--t1); box-shadow: 0 0 0 3px rgba(37,  244, 238, 0.08); }
+.style-cycler.active-3 { border-color: var(--purple); color: var(--t1); box-shadow: 0 0 0 3px rgba(191, 95,  255, 0.08); }
+
+/* Mini "A" preview box inside the button */
+.style-preview {
+  width:            24px;
+  height:           24px;
+  border-radius:    5px;
+  display:          flex;
+  align-items:      center;
+  justify-content:  center;
+  font-size:        13px;
+  font-weight:      900;
+  flex-shrink:      0;
+  transition:       all 0.2s;
+}
+
+/* State indicator pips row */
+.state-indicator {
+  display:     flex;
+  align-items: center;
+  gap:         5px;
+}
+
+.pip {
+  width:         8px;
+  height:        8px;
+  border-radius: 50%;
+  background:    rgba(255, 255, 255, 0.2);
+  flex-shrink:   0;
+  transition:    all 0.22s ease;
+}
+
+/* Each pip gets a brand color — JS toggles .pip--active */
+#state-pip-0 { background: rgba(255, 255, 255, 0.55); }
+#state-pip-1 { background: var(--red);    opacity: 0.30; }
+#state-pip-2 { background: var(--teal);   opacity: 0.30; }
+#state-pip-3 { background: var(--purple); opacity: 0.30; }
+
+.pip.pip--active {
+  opacity:   1 !important;
+  transform: scale(1.35);
+}
+
+.state-desc {
+  font-size:   11px;
+  color:       var(--t3);
+  margin-right: 4px;
+}
+
+/* Mode pill: updates text + color based on active style state */
+.color-mode-row {
+  display:     flex;
+  align-items: center;
+  gap:         7px;
+  font-size:   11.5px;
+  color:       var(--t3);
+}
+
+.mode-pill {
+  padding:        2px 9px;
+  border-radius:  20px;
+  font-size:      10px;
+  font-weight:    700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  transition:     all 0.2s;
+}
+
+.mode-pill.state0 { background: rgba(255, 255, 255, 0.08); color: var(--t2); }
+.mode-pill.state1 { background: rgba(254, 44,  85,  0.20); color: var(--red); }
+.mode-pill.state2 { background: rgba(37,  244, 238, 0.15); color: var(--teal); }
+.mode-pill.state3 { background: rgba(191, 95,  255, 0.20); color: var(--purple); }
+
+
+/* ──────────────────────────────────────────────────────────────
+   9. FONT CHIPS  (horizontally scrollable, injected by JS)
+   ────────────────────────────────────────────────────────────── */
+.chip-scroll {
+  display:    flex;
+  gap:        7px;
+  overflow-x: auto;
+  padding-bottom: 3px;
+  scrollbar-width: none;
+}
+
+.chip-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.font-chip {
+  flex-shrink:   0;
+  padding:       6px 15px;
+  border-radius: 30px;
+  border:        1.5px solid var(--bdr);
+  background:    var(--bg3);
+  color:         var(--t2);
+  font-size:     14px;
+  transition:    all var(--tr);
+  white-space:   nowrap;
+}
+
+.font-chip:hover {
+  border-color: var(--bdr-hi);
+  color:        var(--t1);
+}
+
+.font-chip.active {
+  border-color: var(--teal);
+  color:        var(--teal);
+  background:   rgba(37, 244, 238, 0.07);
+  box-shadow:   0 0 0 3px rgba(37, 244, 238, 0.06);
+}
+
+
+/* ──────────────────────────────────────────────────────────────
+   10. SLIDERS  (Font Size + Line Height)
+   The track fill is driven by a CSS custom property --pct,
+   set by JS on every input event.
+   ────────────────────────────────────────────────────────────── */
+.slider-row {
+  display:     flex;
+  align-items: center;
+  gap:         11px;
+}
+
+.slider-lbl {
+  font-size:   12px;
+  color:       var(--t3);
+  white-space: nowrap;
+  min-width:   52px;
+}
+
+.slider-val {
+  font-size:             12px;
+  color:                 var(--t2);
+  min-width:             36px;
+  text-align:            center;
+  font-variant-numeric:  tabular-nums;
+  background:            var(--bg4);
+  border-radius:         5px;
+  padding:               2px 6px;
+}
+
+/* Range input base */
+input[type="range"] {
+  flex:               1;
+  -webkit-appearance: none;
+  appearance:         none;
+  height:             3px;
+  border-radius:      2px;
+  background:         var(--bg4);
+  outline:            none;
+  cursor:             pointer;
+}
+
+/* Teal fill on the left portion of the track */
+input[type="range"]::-webkit-slider-runnable-track {
+  background: linear-gradient(
+    to right,
+    var(--teal) 0%,
+    var(--teal) var(--pct, 32%),
+    var(--bg4)  var(--pct, 32%)
+  );
+  height:        3px;
+  border-radius: 2px;
+}
+
+/* Thumb — Chrome/Safari */
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance:         none;
+  width:              17px;
+  height:             17px;
+  border-radius:      50%;
+  background:         #fff;
+  margin-top:         -7px;
+  box-shadow:         0 1px 6px rgba(0, 0, 0, 0.50);
+  transition:         transform var(--tr), box-shadow var(--tr);
+}
+
+input[type="range"]::-webkit-slider-thumb:hover {
+  transform:   scale(1.25);
+  box-shadow:  0 0 0 4px rgba(37, 244, 238, 0.22);
+}
+
+/* Thumb — Firefox */
+input[type="range"]::-moz-range-thumb {
+  width:         17px;
+  height:        17px;
+  border-radius: 50%;
+  background:    #fff;
+  border:        none;
+  box-shadow:    0 1px 6px rgba(0, 0, 0, 0.50);
+}
+
+
+/* ──────────────────────────────────────────────────────────────
+   11. COLOR PALETTE  (swatch grid, injected by JS)
+   ────────────────────────────────────────────────────────────── */
+.swatches {
+  display:   flex;
+  gap:       8px;
+  flex-wrap: wrap;
+}
+
+.swatch {
+  width:         32px;
+  height:        32px;
+  border-radius: 50%;
+  border:        2.5px solid transparent;
+  cursor:        pointer;
+  position:      relative;
+  transition:    transform var(--tr), box-shadow var(--tr), border-color var(--tr);
+}
+
+.swatch:hover {
+  transform: scale(1.18);
+}
+
+/* Selected state: white ring */
+.swatch.sel {
+  border-color: #fff;
+  box-shadow:   0 0 0 2px rgba(255, 255, 255, 0.25), 0 3px 10px rgba(0, 0, 0, 0.4);
+}
+
+/* White swatch always needs a visible border */
+.swatch[data-c="#ffffff"] {
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
+/* Checkmark overlay on selected swatch */
+.swatch.sel::after {
+  content:    '';
+  position:   absolute;
+  inset:      0;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpolyline points='2,6 5,9 10,3' stroke='%23fff' stroke-width='2.2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+              center / 12px no-repeat;
+  filter:     drop-shadow(0 1px 2px rgba(0, 0, 0, 0.60));
+}
+
+/* Invert checkmark for light swatches */
+.swatch[data-c="#ffea00"].sel::after,
+.swatch[data-c="#ffffff"].sel::after {
+  filter: invert(1) drop-shadow(0 1px 1px rgba(0, 0, 0, 0.30));
+}
+
+
+/* ──────────────────────────────────────────────────────────────
+   12. BACKGROUND PICKER  (horizontally scrollable)
+   ────────────────────────────────────────────────────────────── */
+.bg-row {
+  display:     flex;
+  gap:         8px;
+  overflow-x:  auto;
+  padding-bottom: 5px;
+  align-items: center;
+  scrollbar-width: none;
+}
+
+.bg-row::-webkit-scrollbar {
+  display: none;
+}
+
+/* Individual background thumbnail */
+.bg-thumb {
+  flex-shrink:   0;
+  width:         46px;
+  height:        70px;
+  border-radius: 10px;
+  border:        2.5px solid transparent;
+  cursor:        pointer;
+  overflow:      hidden;
+  position:      relative;
+  transition:    transform var(--tr), border-color var(--tr), box-shadow var(--tr);
+}
+
+.bg-thumb:hover {
+  transform: scale(1.07);
+}
+
+.bg-thumb.active {
+  border-color: var(--teal);
+  box-shadow:   0 0 0 2px rgba(37, 244, 238, 0.22);
+}
+
+/* Inner div receives the full CSS background string */
+.bg-thumb .t-inner {
+  position:            absolute;
+  inset:               0;
+  background-size:     cover;
+  background-position: center;
+}
+
+/* Upload label (acts as a styled file input trigger) */
+.bg-upload {
+  flex-shrink:      0;
+  width:            46px;
+  height:           70px;
+  border-radius:    10px;
+  border:           1.5px dashed var(--bdr-md);
+  background:       var(--bg3);
+  display:          flex;
+  flex-direction:   column;
+  align-items:      center;
+  justify-content:  center;
+  gap:              5px;
+  cursor:           pointer;
+  transition:       all var(--tr);
+  color:            var(--t3);
+}
+
+.bg-upload:hover {
+  border-color: var(--bdr-hi);
+  color:        var(--t2);
+  background:   var(--bg4);
+}
+
+.bg-upload span {
+  font-size:    10px;
+  text-align:   center;
+  line-height:  1.3;
+}
+
+/* Hidden native file input */
+#bg-file {
+  display: none;
+}
+
+
+/* ──────────────────────────────────────────────────────────────
+   13. DOWNLOAD BUTTON
+   ────────────────────────────────────────────────────────────── */
+#dl-btn {
+  width:          100%;
+  padding:        15px 20px;
+  border-radius:  var(--r2);
+  background:     linear-gradient(110deg, var(--red) 0%, #ff5c75 100%);
+  color:          #fff;
+  font-size:      15px;
+  font-weight:    700;
+  display:        flex;
+  align-items:    center;
+  justify-content: center;
+  gap:            10px;
+  position:       relative;
+  overflow:       hidden;
+  transition:     transform var(--tr), box-shadow var(--tr), background var(--tr);
+  box-shadow:     0 4px 22px var(--red-glow);
+  letter-spacing: 0.02em;
+}
+
+/* Sheen overlay */
+#dl-btn::before {
+  content:    '';
+  position:   absolute;
+  inset:      0;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.18), transparent 60%);
+  opacity:    0;
+  transition: opacity var(--tr);
+}
+
+#dl-btn:hover::before { opacity: 1; }
+#dl-btn:hover  { transform: translateY(-1px); box-shadow: 0 8px 30px var(--red-glow); }
+#dl-btn:active { transform: scale(0.98); }
+#dl-btn:disabled { opacity: 0.65; cursor: wait; }
+
+/* Success state */
+#dl-btn.ok {
+  background: linear-gradient(110deg, #00c853, #69f0ae);
+  box-shadow: 0 4px 22px rgba(0, 200, 83, 0.35);
+}
+
+/* Loading spinner inside the button */
+.dl-spin {
+  width:        18px;
+  height:       18px;
+  border:       2.5px solid rgba(255, 255, 255, 0.30);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation:    spin 0.75s linear infinite;
+}
+
+
+/* ──────────────────────────────────────────────────────────────
+   14. ANIMATIONS
+   ────────────────────────────────────────────────────────────── */
+
+/* Panel entrance */
+@keyframes fadeup {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0);    }
+}
+
+/* Glow ring rotation */
+@keyframes ring-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Button spinner */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+
+/* ──────────────────────────────────────────────────────────────
+   15. SCROLLBAR STYLING  (minimal, dark-theme)
+   ────────────────────────────────────────────────────────────── */
+::-webkit-scrollbar          { width: 4px; height: 4px; }
+::-webkit-scrollbar-track    { background: transparent; }
+::-webkit-scrollbar-thumb    { background: rgba(255, 255, 255, 0.09); border-radius: 2px; }
+
+
+/* ──────────────────────────────────────────────────────────────
+   16. RESPONSIVE  — Mobile ≤ 680px
+   Stack preview above controls, remove sticky positioning.
+   ────────────────────────────────────────────────────────────── */
+@media (max-width: 680px) {
+  .app {
+    flex-direction: column;
+    align-items:    center;
+    padding:        16px 14px 60px;
+    gap:            16px;
   }
-  return entry.css;
-}
 
-
-/* ============================================================
-   5. RENDER — Single source of truth → DOM
-   ────────────────────────────────────────────────────────────
-   render() reads the S state object and updates ONLY the DOM.
-   It is the ONLY function that should write visual properties.
-   Event handlers mutate S then call render().
-   ============================================================ */
-
-/**
- * render
- * Synchronises the entire UI with the current S state.
- * Called after any state mutation.
- */
-function render() {
-  /* ── 5a. Text content ── */
-  DOM.pvSpan.textContent = S.text || 'اكتب قصتك هنا...';
-
-  /* ── 5b. Typography ── */
-  DOM.pvSpan.style.fontFamily = `'${S.font}', sans-serif`;
-  DOM.pvSpan.style.fontSize   = `${S.size}px`;
-  DOM.pvSpan.style.lineHeight = S.lineHeight;
-  DOM.textContainer.style.textAlign = S.align;
-
-  /* ── 5c. Text Style (4 states) ── */
-  applyTextStyle();
-
-  /* ── 5d. Background ── */
-  applyBackground();
-
-  /* ── 5e. Style Cycler Button UI ── */
-  updateStyleCyclerUI();
-
-  /* ── 5f. Swatch active marks ── */
-  document.querySelectorAll('.swatch').forEach((sw) => {
-    sw.classList.toggle('sel', sw.dataset.c === S.color);
-  });
-
-  /* ── 5g. Background thumb active marks ── */
-  document.querySelectorAll('.bg-thumb').forEach((t) => {
-    t.classList.toggle('active', !S.bgImage && t.dataset.id === S.bgId);
-  });
-
-  /* ── 5h. Character counter ── */
-  const len = S.text.length;
-  DOM.charCount.textContent = `${len} / 300`;
-  DOM.charCount.style.color = len >= 300 ? '#ef4444'
-                            : len >= 250 ? '#f59e0b'
-                            : 'var(--t3)';
-
-  /* ── 5i. Slider track fills ── */
-  setSliderTrack(DOM.sizeSlider, 13, 62, S.size);
-  setSliderTrack(DOM.lhSlider,   10, 30, S.lineHeight * 10);
-}
-
-
-/**
- * applyTextStyle
- * Applies one of 4 visual text styles to #preview-span.
- * ────────────────────────────────────────────────────────────
- * This function is deliberately isolated so the 4-state logic
- * stays readable and easy to extend.
- *
- * IMPORTANT: We reset all style properties first, then
- * re-apply only what the current state needs. This prevents
- * stale values (e.g., leftover textShadow from Neon state
- * bleeding into Normal state on the next cycle).
- */
-function applyTextStyle() {
-  const ts       = S.textStyle;
-  const col      = S.color;
-  const { r, g, b } = hexToRgb(col);
-  const span     = DOM.pvSpan;
-
-  /* 1. Full CSS reset on the span (wipes all previous inline styles) */
-  span.style.cssText = '';
-
-  /* 2. Re-apply structural properties that render() needs on every call */
-  span.style.display     = 'inline';
-  span.style.whiteSpace  = 'pre-wrap';
-  span.style.wordBreak   = 'break-word';
-  span.style.fontFamily  = `'${S.font}', sans-serif`;
-  span.style.fontSize    = `${S.size}px`;
-  span.style.lineHeight  = S.lineHeight;
-
-  /* 3. Remove all state classes, then add the correct one */
-  span.classList.remove('style-solid', 'style-translucent', 'style-neon');
-
-  /* 4. Apply state-specific styles */
-  switch (ts) {
-
-    /*
-     * STATE 0 — Normal
-     * ─────────────────────────────────────────────────────────────
-     * Text is the selected palette color.
-     * A very subtle drop-shadow adds readability over any background.
-     */
-    case 0:
-      span.style.color      = col;
-      span.style.textShadow = '0 1px 6px rgba(0, 0, 0, 0.50)';
-      break;
-
-    /*
-     * STATE 1 — Solid Background
-     * ─────────────────────────────────────────────────────────────
-     * Background = selected color at 100% opacity.
-     * Text auto-contrasts (black or white) for legibility.
-     *
-     * KEY TRICK: display:inline + box-decoration-break:clone
-     * → CSS "clones" the padding, background, and border-radius
-     *   onto EACH line box when text wraps to a new line.
-     * → Result: every line gets its own pill-shaped background,
-     *   exactly like the TikTok text highlight feature.
-     * → The CSS class .style-solid sets box-decoration-break:clone.
-     */
-    case 1:
-      span.classList.add('style-solid');
-      span.style.backgroundColor = col;
-      span.style.color           = contrastColor(col);
-      span.style.padding         = '4px 11px';
-      span.style.borderRadius    = '8px';
-      // Explicitly set both prefixed and standard for max compatibility
-      span.style.boxDecorationBreak         = 'clone';
-      span.style.webkitBoxDecorationBreak   = 'clone';
-      break;
-
-    /*
-     * STATE 2 — Translucent Background
-     * ─────────────────────────────────────────────────────────────
-     * Same as Solid, but background at 50% opacity.
-     * We use rgba() (built via hexToRgb) because CSS transitions
-     * can't interpolate between a named color and rgba.
-     * Text stays white — dark text on semi-transparent bg is hard to read.
-     */
-    case 2:
-      span.classList.add('style-translucent');
-      span.style.backgroundColor = `rgba(${r}, ${g}, ${b}, 0.50)`;
-      span.style.color           = '#ffffff';
-      span.style.textShadow      = '0 1px 4px rgba(0, 0, 0, 0.55)';
-      span.style.padding         = '4px 11px';
-      span.style.borderRadius    = '8px';
-      span.style.boxDecorationBreak         = 'clone';
-      span.style.webkitBoxDecorationBreak   = 'clone';
-      break;
-
-    /*
-     * STATE 3 — Neon / Outline
-     * ─────────────────────────────────────────────────────────────
-     * White text with:
-     *   1. -webkit-text-stroke: outlines each glyph with the color.
-     *   2. Multi-layer text-shadow: tight core glow + wide soft halo.
-     *
-     * The layered shadows create a luminous "sign" effect where:
-     *   • Layer 1 (0 0 4px)  → bright inner core
-     *   • Layer 2 (0 0 12px) → mid-range bloom
-     *   • Layer 3 (0 0 28px) → wide halo at 70% opacity
-     *   • Layer 4 (0 0 55px) → very wide diffuse glow at 35% opacity
-     */
-    case 3:
-      span.classList.add('style-neon');
-      span.style.color             = '#ffffff';
-      span.style.webkitTextStroke  = `1.5px ${col}`;
-      span.style.textShadow = [
-        `0 0  4px ${col}`,
-        `0 0 12px ${col}`,
-        `0 0 28px rgba(${r}, ${g}, ${b}, 0.70)`,
-        `0 0 55px rgba(${r}, ${g}, ${b}, 0.35)`,
-      ].join(', ');
-      break;
-  }
-}
-
-
-/**
- * applyBackground
- * Writes the active background CSS to #preview-bg.
- * Handles both CSS-string backgrounds and uploaded image data-URLs.
- */
-function applyBackground() {
-  if (S.bgImage) {
-    /* Uploaded image: override everything with the data-URL */
-    DOM.previewBg.style.cssText           = '';
-    DOM.previewBg.style.backgroundImage   = `url(${S.bgImage})`;
-    DOM.previewBg.style.backgroundSize    = 'cover';
-    DOM.previewBg.style.backgroundPosition = 'center';
-    return;
+  .col-preview {
+    position:  static;          /* remove sticky on mobile */
+    width:     100%;
+    max-width: 250px;
   }
 
-  const entry = BACKGROUNDS.find((b) => b.id === S.bgId);
-  if (entry) {
-    DOM.previewBg.style.cssText = bgCssForEntry(entry);
-  }
-}
-
-
-/**
- * updateStyleCyclerUI
- * Updates the #style-btn button appearance and the surrounding
- * state indicator strip to reflect the current S.textStyle.
- */
-function updateStyleCyclerUI() {
-  const ts    = S.textStyle;
-  const state = STYLE_STATES[ts];
-  const col   = S.color;
-  const { r, g, b } = hexToRgb(col);
-
-  /* ── Button border class ── */
-  DOM.styleBtn.className = `style-cycler ${state.btnClass}`;
-
-  /* ── Button text label ── */
-  DOM.styleLabel.textContent = state.label;
-
-  /* ── State description strip ── */
-  DOM.stateDesc.textContent = state.desc;
-
-  /* ── Pip dots (one per state) ── */
-  STYLE_STATES.forEach(({ id }) => {
-    const pip = $(`state-pip-${id}`);
-    if (!pip) return;
-    pip.classList.toggle('pip--active', id === ts);
-  });
-
-  /* ── Mini "A" preview box inside the button ── */
-  const preview = DOM.stylePreview;
-
-  switch (ts) {
-    case 0: // Normal
-      preview.style.background        = 'transparent';
-      preview.style.color             = col;
-      preview.style.textShadow        = 'none';
-      preview.style.border            = '1.5px solid rgba(255,255,255,0.22)';
-      preview.style.webkitTextStroke  = '';
-      break;
-
-    case 1: // Solid
-      preview.style.background        = col;
-      preview.style.color             = contrastColor(col);
-      preview.style.textShadow        = 'none';
-      preview.style.border            = 'none';
-      preview.style.webkitTextStroke  = '';
-      break;
-
-    case 2: // Translucent
-      preview.style.background        = `rgba(${r}, ${g}, ${b}, 0.50)`;
-      preview.style.color             = '#ffffff';
-      preview.style.textShadow        = 'none';
-      preview.style.border            = 'none';
-      preview.style.webkitTextStroke  = '';
-      break;
-
-    case 3: // Neon
-      preview.style.background        = 'transparent';
-      preview.style.color             = col;
-      preview.style.textShadow        = `0 0 8px ${col}, 0 0 20px ${col}`;
-      preview.style.border            = '1.5px solid rgba(255,255,255,0.22)';
-      preview.style.webkitTextStroke  = `0.5px ${col}`;
-      break;
+  .card-shell {
+    width: 100%;
   }
 
-  /* ── Mode pill (below swatches) ── */
-  DOM.modePill.textContent = state.pillText;
-  DOM.modePill.className   = `mode-pill ${state.pillCls}`;
+  .col-controls {
+    width: 100%;
+  }
+
+  .style-cycler {
+    padding: 0 10px;
+  }
 }
-
-
-/* ============================================================
-   6. BUILD UI  — Inject dynamic elements
-   ────────────────────────────────────────────────────────────
-   Called once during init. Reads configuration arrays and
-   generates DOM nodes so contributors only edit the arrays.
-   ============================================================ */
-
-/**
- * buildSwatches
- * Creates a circular color swatch button for each COLORS entry
- * and appends it to #swatches.
- */
-function buildSwatches() {
-  COLORS.forEach(({ c, name }) => {
-    const btn             = document.createElement('button');
-    btn.className         = 'swatch';
-    btn.dataset.c         = c;
-    btn.title             = name;
-    btn.style.background  = c;
-    btn.setAttribute('aria-label', name);
-
-    btn.addEventListener('click', () => {
-      S.color = c;
-      render();
-    });
-
-    DOM.swatchWrap.appendChild(btn);
-  });
-}
-
-/**
- * buildFontChips
- * Creates a scrollable chip button for each FONTS entry
- * and appends it to #font-row.
- */
-function buildFontChips() {
-  FONTS.forEach(({ family, label }, index) => {
-    const btn = document.createElement('button');
-    btn.className         = `font-chip${index === 0 ? ' active' : ''}`;
-    btn.dataset.font      = family;
-    btn.textContent       = label;
-    btn.style.fontFamily  = `'${family}', sans-serif`;
-    btn.setAttribute('role', 'listitem');
-
-    btn.addEventListener('click', () => {
-      S.font = family;
-      document.querySelectorAll('.font-chip').forEach((c) => c.classList.remove('active'));
-      btn.classList.add('active');
-      render();
-    });
-
-    DOM.fontRow.appendChild(btn);
-  });
-}
-
-/**
- * buildBackgroundThumbs
- * Creates a thumbnail card for each BACKGROUNDS entry and inserts
- * them before the upload label in #bg-row.
- *
- * Each thumb has an inner div that receives the background CSS/image,
- * preserving the card's border-radius clipping.
- */
-function buildBackgroundThumbs() {
-  const uploadLabel = DOM.bgRow.querySelector('label');
-
-  BACKGROUNDS.forEach((bg) => {
-    const wrap      = document.createElement('div');
-    wrap.className  = `bg-thumb${bg.id === S.bgId ? ' active' : ''}`;
-    wrap.dataset.id = bg.id;
-    wrap.setAttribute('role', 'listitem');
-    wrap.setAttribute('title', bg.id);
-
-    const inner           = document.createElement('div');
-    inner.className       = 't-inner';
-    inner.style.cssText   = bgCssForEntry(bg);
-
-    wrap.appendChild(inner);
-
-    wrap.addEventListener('click', () => {
-      S.bgId    = bg.id;
-      S.bgImage = null;          // clear any uploaded image
-      render();
-    });
-
-    /* Insert before the upload label so upload is always last */
-    DOM.bgRow.insertBefore(wrap, uploadLabel);
-  });
-}
-
-
-/* ============================================================
-   7. EVENT HANDLERS
-   ============================================================ */
-
-/**
- * wireTextarea
- * Live-syncs textarea → S.text → render().
- */
-function wireTextarea() {
-  DOM.textarea.addEventListener('input', function () {
-    S.text = this.value;
-    render();
-  });
-}
-
-/**
- * wireAlignment
- * Reads data-align from each .seg-btn and updates S.align.
- */
-function wireAlignment() {
-  document.querySelectorAll('.seg-btn[data-align]').forEach((btn) => {
-    btn.addEventListener('click', function () {
-      S.align = this.dataset.align;
-
-      /* Update aria-pressed and active class */
-      document.querySelectorAll('.seg-btn[data-align]').forEach((b) => {
-        b.classList.remove('active');
-        b.removeAttribute('aria-pressed');
-      });
-      this.classList.add('active');
-      this.setAttribute('aria-pressed', 'true');
-
-      render();
-    });
-  });
-}
-
-/**
- * wireStyleCycler
- * Advances S.textStyle through 0 → 1 → 2 → 3 → 0 … on each click.
- */
-function wireStyleCycler() {
-  DOM.styleBtn.addEventListener('click', () => {
-    S.textStyle = (S.textStyle + 1) % STYLE_STATES.length;
-    render();
-  });
-}
-
-/**
- * wireSizeSlider
- * Updates S.size and the display value label on every slider move.
- */
-function wireSizeSlider() {
-  DOM.sizeSlider.addEventListener('input', function () {
-    S.size                   = parseInt(this.value, 10);
-    DOM.sizeVal.textContent  = `${S.size}px`;
-    render();
-  });
-}
-
-/**
- * wireLineHeightSlider
- * The slider stores integers 10–30 (representing 1.0×–3.0×).
- * Dividing by 10 avoids floating-point drift from step="0.1".
- */
-function wireLineHeightSlider() {
-  DOM.lhSlider.addEventListener('input', function () {
-    S.lineHeight            = parseInt(this.value, 10) / 10;
-    DOM.lhVal.textContent   = `${S.lineHeight.toFixed(1)}×`;
-    render();
-  });
-}
-
-/**
- * wireImageUpload
- * Converts the selected file to a data-URL and stores it in S.bgImage.
- * Input value is reset afterward so the same file can be re-uploaded.
- */
-function wireImageUpload() {
-  DOM.bgFile.addEventListener('change', function () {
-    const file = this.files[0];
-    if (!file) return;
-
-    const reader    = new FileReader();
-    reader.onload   = (e) => {
-      S.bgImage = e.target.result;
-      S.bgId    = null;
-      render();
-    };
-    reader.readAsDataURL(file);
-
-    /* Allow re-selecting the same file */
-    this.value = '';
-  });
-}
-
-
-/* ============================================================
-   8. DRAG & DROP — Mouse + Touch  (absolute top/left)
-   ────────────────────────────────────────────────────────────
-   Design rationale for using top/left instead of transform:
-   ┌──────────────────────────────────────────────────────────┐
-   │  html2canvas reads the *painted* layout of DOM elements  │
-   │  and reconstructs it on a canvas.                        │
-   │                                                          │
-   │  CSS transform-based positioning (translate) is applied  │
-   │  AFTER layout and is NOT reliably captured by html2canvas │
-   │  — the exported image often shows text at the original   │
-   │  un-dragged position.                                    │
-   │                                                          │
-   │  Using top + left (which ARE layout properties) ensures  │
-   │  html2canvas reads the correct dragged position.         │
-   └──────────────────────────────────────────────────────────┘
-
-   Two-phase position strategy:
-   Phase 1 (CSS):  Container starts centered via:
-                   top:50%; left:50%; transform:translate(-50%,-50%)
-                   → pure CSS, zero JS needed for first paint.
-
-   Phase 2 (JS):   On the first drag, initDragPosition() runs once:
-                   1. Reads getBoundingClientRect() → pixel coords.
-                   2. Sets explicit top/left px values.
-                   3. Strips the CSS transform.
-                   After that, only top/left are mutated.
-   ============================================================ */
-
-/** @type {boolean} Whether the user is currently dragging */
-let isDragging = false;
-
-/** @type {number} Client X/Y at drag start */
-let dragStartX = 0;
-let dragStartY = 0;
-
-/** @type {number} Container top/left at drag start */
-let containerStartX = 0;
-let containerStartY = 0;
-
-/** @type {boolean} True after initDragPosition() has run once */
-let dragPositionInitialised = false;
-
-/**
- * initDragPosition
- * One-time conversion from CSS transform-centering to explicit px coords.
- * Called on the first mousedown/touchstart on the text container.
- */
-function initDragPosition() {
-  if (dragPositionInitialised) return;
-
-  const boxRect   = DOM.previewBox.getBoundingClientRect();
-  const contRect  = DOM.textContainer.getBoundingClientRect();
-
-  /* Current pixel position of the container relative to the card */
-  const relTop    = contRect.top  - boxRect.top;
-  const relLeft   = contRect.left - boxRect.left;
-
-  /* Switch to explicit px — strip the centering transform */
-  DOM.textContainer.style.transform = 'none';
-  DOM.textContainer.style.top       = `${relTop}px`;
-  DOM.textContainer.style.left      = `${relLeft}px`;
-
-  dragPositionInitialised = true;
-}
-
-/**
- * clampDragPosition
- * Prevents the text container from being dragged completely out of frame.
- * Keeps at least MARGIN px of the container inside the card on all sides.
- *
- * @param {number} x  Desired left value
- * @param {number} y  Desired top value
- * @returns {{x:number, y:number}}
- */
-function clampDragPosition(x, y) {
-  const MARGIN = 20;
-  const boxW   = DOM.previewBox.offsetWidth;
-  const boxH   = DOM.previewBox.offsetHeight;
-  const contW  = DOM.textContainer.offsetWidth;
-  const contH  = DOM.textContainer.offsetHeight;
-
-  return {
-    x: Math.min(Math.max(x, MARGIN - contW), boxW - MARGIN),
-    y: Math.min(Math.max(y, MARGIN - contH), boxH - MARGIN),
-  };
-}
-
-/**
- * onDragStart  (shared by mouse and touch)
- * Records the pointer start position and the container's current position.
- */
-function onDragStart(clientX, clientY) {
-  /* Ensure we're working with top/left (not transform) */
-  initDragPosition();
-
-  isDragging      = true;
-  dragStartX      = clientX;
-  dragStartY      = clientY;
-  containerStartX = parseFloat(DOM.textContainer.style.left) || 0;
-  containerStartY = parseFloat(DOM.textContainer.style.top)  || 0;
-
-  DOM.textContainer.classList.add('dragging');
-
-  /* Hide the drag hint permanently after first interaction */
-  DOM.dragHint.classList.add('hidden');
-}
-
-/**
- * onDragMove  (shared by mouse and touch)
- * Calculates new position from delta and applies it as top/left.
- */
-function onDragMove(clientX, clientY) {
-  if (!isDragging) return;
-
-  const dx      = clientX - dragStartX;
-  const dy      = clientY - dragStartY;
-  const { x, y } = clampDragPosition(containerStartX + dx, containerStartY + dy);
-
-  /* Direct DOM mutation here (not via render) for 60fps performance */
-  DOM.textContainer.style.left = `${x}px`;
-  DOM.textContainer.style.top  = `${y}px`;
-}
-
-/**
- * onDragEnd  (shared by mouse and touch)
- */
-function onDragEnd() {
-  if (!isDragging) return;
-  isDragging = false;
-  DOM.textContainer.classList.remove('dragging');
-}
-
-/**
- * wireDrag
- * Attaches all mouse and touch listeners.
- * Mouse events are on the container (start) and window (move/end).
- * Touch events need passive:false on move to call preventDefault().
- */
-function wireDrag() {
-  /* ── Mouse ── */
-  DOM.textContainer.addEventListener('mousedown', (e) => {
-    e.preventDefault();
-    onDragStart(e.clientX, e.clientY);
-  });
-
-  window.addEventListener('mousemove', (e) => {
-    onDragMove(e.clientX, e.clientY);
-  });
-
-  window.addEventListener('mouseup', onDragEnd);
-
-  /* ── Touch ── */
-  DOM.textContainer.addEventListener('touchstart', (e) => {
-    e.preventDefault(); /* prevents page scroll while dragging */
-    const touch = e.touches[0];
-    onDragStart(touch.clientX, touch.clientY);
-  }, { passive: false });
-
-  window.addEventListener('touchmove', (e) => {
-    if (!isDragging) return;
-    e.preventDefault();
-    const touch = e.touches[0];
-    onDragMove(touch.clientX, touch.clientY);
-  }, { passive: false });
-
-  window.addEventListener('touchend', onDragEnd);
-}
-
-
-/* ============================================================
-   9. EXPORT — html2canvas PNG download
-   ────────────────────────────────────────────────────────────
-   We render #preview-box at 3× device pixel ratio for a
-   high-resolution output suitable for sharing on social media.
-
-   html2canvas compatibility notes:
-   • scale:3          → 3× resolution
-   • useCORS:true     → allows images from same origin / CORS headers
-   • allowTaint:true  → captures images that can't be served CORS-clean
-   • backgroundColor:null → preserves transparency where applicable
-   • initDragPosition() is called before capture so the text container
-     has explicit top/left coords (not a CSS transform).
-   ============================================================ */
-
-/**
- * wireExport
- * Attaches the click handler to #dl-btn.
- * Manages three button states: default → loading → success.
- */
-function wireExport() {
-  DOM.dlBtn.addEventListener('click', async () => {
-    if (DOM.dlBtn.disabled) return;
-
-    /* Ensure text container uses top/left before html2canvas reads layout */
-    initDragPosition();
-
-    /* ── Loading state ── */
-    DOM.dlBtn.disabled          = true;
-    DOM.dlIcon.style.display    = 'none';
-    DOM.dlSpin.style.display    = 'block';
-    DOM.dlLbl.textContent       = 'جاري التصدير...';
-
-    try {
-      const canvas = await html2canvas(DOM.previewBox, {
-        scale:           3,
-        useCORS:         true,
-        allowTaint:      true,
-        backgroundColor: null,
-        logging:         false,
-      });
-
-      /* Trigger browser download */
-      const link      = document.createElement('a');
-      link.download   = `story-${Date.now()}.png`;
-      link.href       = canvas.toDataURL('image/png');
-      link.click();
-
-      /* ── Success state ── */
-      DOM.dlBtn.classList.add('ok');
-      DOM.dlSpin.style.display    = 'none';
-      DOM.dlOkIcon.style.display  = 'block';
-      DOM.dlLbl.textContent       = 'تم الحفظ بنجاح ✓';
-
-      /* Reset after 2.7 s */
-      setTimeout(() => {
-        DOM.dlBtn.classList.remove('ok');
-        DOM.dlBtn.disabled          = false;
-        DOM.dlOkIcon.style.display  = 'none';
-        DOM.dlIcon.style.display    = 'block';
-        DOM.dlLbl.textContent       = 'تنزيل القصة';
-      }, 2700);
-
-    } catch (err) {
-      /* ── Error state — restore button ── */
-      console.error('[Story Maker Pro] Export failed:', err);
-      DOM.dlBtn.disabled       = false;
-      DOM.dlSpin.style.display = 'none';
-      DOM.dlIcon.style.display = 'block';
-      DOM.dlLbl.textContent    = 'تنزيل القصة';
-      alert('حدث خطأ أثناء التصدير. يرجى المحاولة مرة أخرى.');
-    }
-  });
-}
-
-
-/* ============================================================
-   10. INIT — Application entry point
-   ────────────────────────────────────────────────────────────
-   Execution order matters:
-     1. Build dynamic UI (swatches, chips, thumbs)
-     2. Wire all event handlers
-     3. Initial render to paint the correct default state
-   ============================================================ */
-
-function init() {
-  /* 1. Build dynamic UI elements from config arrays */
-  buildSwatches();
-  buildFontChips();
-  buildBackgroundThumbs();
-
-  /* 2. Wire event handlers */
-  wireTextarea();
-  wireAlignment();
-  wireStyleCycler();
-  wireSizeSlider();
-  wireLineHeightSlider();
-  wireImageUpload();
-  wireDrag();
-  wireExport();
-
-  /* 3. Paint initial state */
-  render();
-
-  console.info('[Story Maker Pro] ✦ Ready — صانع القصص جاهز');
-}
-
-/* ── Run ── */
-init();
